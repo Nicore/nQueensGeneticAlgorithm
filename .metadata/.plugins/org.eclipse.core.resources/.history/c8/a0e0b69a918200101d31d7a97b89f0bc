@@ -1,0 +1,335 @@
+/**
+ * @file nQueensGA.java
+ * @author Nick Comer
+ * Cosc343 Assignment 3
+ * May 2011
+ */
+
+
+import java.util.*;
+
+/**
+ * The nQueensGA class, for the Cosc343 Assignment 3: Optimisation with
+ * genetic algorithms. This class contains all the methods related to solving
+ * the n-queens problem for 8 queens with the use of a genetic algorithm.
+ * This implementation depicts a possible solution as an 8-long String, where
+ * each index indicates the column of a queen and has an integer that denotes 
+ * the row of that queen. 
+ */
+public class nQueensGA {
+	
+	static final int N = 8; 	//number of queens
+	static int population = 512;	//amount of vectors aka size of gene pool
+	static int persistFactor = 4;//denominator of fraction of 
+	static int persistence = population/persistFactor; //population to remain
+	static int mutaFactor = 500; //denominator of mutation chance, ie 1/factor
+	static int mutaCount = 0;	//number of mutations that occurred
+	static double costAvg = 0;	//average cost for a population
+	static int costMin = 0;		//smallest cost for a population
+	static int costMinId = 0;	//index of smallest cost
+	static boolean randSplit = true; //whether random splitting is to be used
+	static boolean multiSplit = false; //if multiple split points will be used
+	static int mSplit1 = 3;		//two points where a parent can be split
+	static int mSplit2 = 5;
+	static boolean mutatable = true; //whether to allow mutations
+	static int splitPos = 4;	//position to split parents at if required
+	static int genCount = 1;	//number of generations
+	static int genMax = 500;		//maximum number of generations
+	
+	static Random rng = new Random(); //random number generator
+	
+	//ArrayLists for storing the vectors' values
+	static ArrayList<String> vectors = new ArrayList<String>();
+	static ArrayList<String> vecOffspring = new ArrayList<String>();
+	//ArrayList for storing fitness values
+	static ArrayList<Integer> fitnesses = new ArrayList<Integer>();
+	
+	/**
+	 * Initialise the first generation of possible solutions and output the 
+	 * algorithm's parameters. Then begin the process of advancing through
+	 * generations to find a complete solution.
+	 * 
+	 * @param args Command line arguments not used.
+	 */
+	public static void main(String[] args) {
+		//make a method for handling input or something
+		//will need to assign values for things like population, split location, mutation chance
+		
+		//anyway, there's totally testing stuff here
+		
+		String initText = ("Generating " +population+" vectors,");
+		initText += ("\nPersistent parents: " + persistence);
+		initText += ("\nMutation factor; 1 in "+mutaFactor);
+		if(randSplit) {
+			initText += ("\nRandom splitting");
+		} else if (multiSplit) {
+			initText += ("\nSplitting at " + mSplit1+ " or " + mSplit2);
+		} else {
+			initText += ("\nSplitting at: " +splitPos);
+		}
+		System.out.println(initText);
+		vectorGen(population);
+		generate();
+	}
+	
+	/**
+	 * Generate the initial set of vectors, filling Strings to the appropriate
+	 * length with random numbers indicating the positions of 8 queens on a 
+	 * chess board.
+	 * 
+	 * @param vecCount The number of vectors to produce.
+	 */
+	public static void vectorGen(int vecCount) {
+		String temp;
+		for (int i = 0; i < vecCount; i++) {
+			temp = "";
+			for (int j = 0; j < N; j++) {
+				temp += (rng.nextInt(N)+1);
+			}
+			vectors.add(temp);
+		}
+	}
+	
+	/**
+	 * The generate method will, while the maximum number of generations hasn't
+	 * been reached; continually decide fitnesses, select and repopulate the 
+	 * gene pool until a solution is found or the maximum allowed generation 
+	 * is reached.
+	 */
+	public static void generate() {
+		while (genCount <= genMax) {
+			fitness();
+			//if we've hit a solution
+			if (costMin == 0) {
+				//do something important like announce the found vector
+				//and all the related components of it
+				System.out.println("Found a solution: (Gen " + genCount+")");
+				System.out.println(vectors.get(costMinId) +" at "+costMinId);
+				System.out.println("Cost min: " +costMin+", avg: "+costAvg);
+				break;
+			//otherwise
+			} else {
+				selection();
+				offspring();
+			}
+			printStats();
+			genCount++;
+		}
+		
+	}
+
+	/**
+	 * Discover the fitness of each vector. Checking vertically isn't needed
+	 * as each queen has its own column. To check if there is another queen 
+	 * on the same row, split up the vector and check its substrings.
+	 * To check diagonal cases, search out in each diagonal direction for 
+	 * a queen.
+	 * While the checks are run, keep a tally of the average and minimum costs
+	 * for later use.
+	 * The goal is to find a minimum cost of 0 where no queens are able to
+	 * attack each other. If a queen is able to attack another queen then the 
+	 * target queen could also attack back, so each time two queens can attack
+	 * each other, the cost increases by 2.
+	 */
+	public static void fitness() {
+		int costtemp;
+		
+		String pos; //position
+		String vectemp;
+		int val, curr; //val to check against curr(ent) piece position
+		costAvg = 0;
+		costMin = 100; //set costMin to high value so it will be set 
+		
+		fitnesses.clear();
+		
+		//for every vector (vec)
+		for (int vec = 0; vec < vectors.size(); vec++) {
+			costtemp = 0;
+			vectemp = vectors.get(vec);
+			//for every piece (pc)
+			for (int pc = 0; pc < N; pc++) {
+				//get the current piece value 
+				pos = vectemp.charAt(pc)+"";
+				curr = (int) pos.charAt(0);
+
+				//check if there are any queens that are horizontally left
+				if (vectemp.substring(0, pc).contains(pos)) {
+					costtemp++;
+				}
+				//and right
+				if (vectemp.substring(pc+1, N).contains(pos)) {
+					costtemp++;
+				}
+				//now check the diagonals to left up
+				for (int i = pc-1; i >=0; i--) {
+					val = (int) vectemp.charAt(i);
+					//if the value is + or - the difference of 
+					if (curr+(pc-i) == val) {
+						costtemp++;
+						break;
+					}
+				}
+				//left down
+				for (int i = pc-1; i >=0; i--) {
+					val = (int) vectemp.charAt(i);
+					//if the value is + or - the difference of 
+					if (curr-(pc-i) == val) {
+						costtemp++;
+						break;
+					}
+				}
+				//and right up
+				for (int i = pc+1; i < N; i++) {
+					val = (int) vectemp.charAt(i);
+					if (curr+(i-pc) == val) {
+						costtemp++;
+						break;
+					}
+				}
+				//right down
+				for (int i = pc+1; i < N; i++) {
+					val = (int) vectemp.charAt(i);
+					if (curr-(i-pc) == val) {
+						costtemp++;
+						break;
+					}
+				}
+			} //end per piece
+			fitnesses.add(costtemp);
+			costAvg += costtemp;
+			if (costtemp < costMin) {
+				costMin = costtemp;
+				costMinId = vec; //becomes inaccurate after selection process
+			}
+		} //end per vector
+		
+		costAvg /= vectors.size();
+	} //end fitness
+	
+	/**
+	 * The selection method moves through the vectors ArrayList in reverse 
+	 * order, removing entries that have fitness values larger than or equal to
+	 * the average for the first time, then if there are still more than the 
+	 * number of parents wanted, be more strict in the removal to reduce the 
+	 * population to the appropriate level.
+	 */
+	public static void selection() {
+		int i = vectors.size()-1;
+		while (vectors.size() > persistence && i >= 0) {
+			if (fitnesses.get(i) >= costAvg) {
+				vectors.remove(i);
+				fitnesses.remove(i);
+				
+			} 
+			i--;
+		}
+		//if there's still more than the persistence get rid of the first lot
+		while (vectors.size() > persistence) {
+			vectors.remove(0);
+			fitnesses.remove(0);
+		}		
+
+	}
+	
+	//get better next gen
+	/**
+	 * Fill the vecOffspring ArrayList with the children of the selected 
+	 * parents. The split occurs either at a specified location or randomly
+	 * between indices 1 and 6 (inclusive).
+	 * Mutate the children afterwards.
+	 * Then add the children to the main vector population.
+	 */
+	public static void offspring() {
+		int p1, p2, split;
+		int offcount = 0;
+		String child;
+		
+		vecOffspring.clear();
+		
+		//while we haven't fully recreated the population max
+		while (offcount < (population - persistence)) {
+			//randomly select 2 parents
+			p1 = rng.nextInt(persistence);
+			p2 = rng.nextInt(persistence);
+			
+			//if it's using a random split
+			if (randSplit) {
+				split = rng.nextInt(N-1)+1; //+-1 so the string has a split
+			} else if (multiSplit) {
+				if (rng.nextBoolean()) {
+					split = mSplit1;					
+				} else {
+					split = mSplit2;
+				}
+			} else {
+				//otherwise get the position its splitting at
+				split = splitPos;
+			}
+			//create a child
+			child = vectors.get(p1).substring(0, split) + 
+					vectors.get(p2).substring(split, N);
+			vecOffspring.add(child);
+			
+			offcount++;
+		}
+		
+		if (mutatable) {
+			mutate(mutaFactor);
+		}
+		//add all the new offspring
+		vectors.addAll(vecOffspring);
+		
+	}
+	
+	/**
+	 * The mutate method traverses the offspring list, randomly choosing the
+	 * children to mutate. 
+	 * 
+	 * @param factor The denominator in the chance equation for selection,
+	 * 			     ie 1/factor is the chance a vector has of being selected.
+	 */
+	public static void mutate(int factor) {
+		String temp, temp1, temp2;
+		int randChar;
+		for (int i = 0; i < vecOffspring.size(); i++) {
+			if (rng.nextInt(factor) < 1) {
+				randChar = rng.nextInt(N);
+				temp = vecOffspring.remove(i);
+				temp1 = temp.substring(0, randChar);
+				temp2 = temp.substring(randChar+1, N);
+				temp = temp1 + (rng.nextInt(N)+1) + temp2;
+				
+				vecOffspring.add(i, temp);
+				mutaCount++;
+			}
+		}
+		
+	}
+	
+	/**
+	 * Print out all the vectors of the current population to standard out, 
+	 * along with some additional statistics.
+	 */
+	public static void printVectors() {
+		if(vectors.size() == fitnesses.size()) {
+			for (int i = 0; i < vectors.size(); i++) {
+				System.out.println(vectors.get(i) + ", " + fitnesses.get(i));
+			}
+		}
+		System.out.println(vectors.size());
+		System.out.println(costAvg);
+		System.out.println(costMin);
+		System.out.println(costMinId);
+		System.out.println(mutaCount);
+	}
+	
+	/**
+	 * Print out the statistics of a generation including average and minimum
+	 * costs and the number of mutations that have occurred so far.
+	 */
+	public static void printStats() {
+		System.out.println("Generation: " + genCount+", Min cost: "+costMin+
+				", Avg cost: " +costAvg+", Mutations: " +mutaCount );
+	}
+	
+}
